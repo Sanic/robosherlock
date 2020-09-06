@@ -39,6 +39,8 @@
 #include "uima/annotator_mgr.hpp"
 
 #include <robosherlock/flowcontrol/RSProcessManager.h>
+#include <robosherlock/CASConsumerContext.h>
+
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -68,6 +70,12 @@ void help()
             << std::endl;
 }
 
+void signalHandler(int signum)
+{
+  outWarn("Interrupt signal " << signum << " recevied. Exiting!");
+  exit(signum);
+}
+
 /* ----------------------------------------------------------------------- */
 /*       Main                                                              */
 /* ----------------------------------------------------------------------- */
@@ -91,6 +99,8 @@ int main(int argc, char* argv[])
 
   std::string analysis_engine_names, analysis_engine_file, knowledge_engine;
   bool useVisualizer, waitForServiceCall, useObjIDRes, pervasive, parallel;
+  bool publishResults;
+
 
   nh.param("ae", analysis_engine_names, std::string(""));
   nh.param("wait", waitForServiceCall, false);
@@ -99,6 +109,7 @@ int main(int argc, char* argv[])
   nh.param("parallel", parallel, false);
   nh.param("withIDRes", useObjIDRes, false);
   nh.param("ke", knowledge_engine, std::string("SWI_PROLOG"));
+  nh.param("publish_results", publishResults, false);
 
   nh.deleteParam("ae");
   nh.deleteParam("wait");
@@ -107,6 +118,10 @@ int main(int argc, char* argv[])
   nh.deleteParam("parallel");
   nh.deleteParam("withIdRes");
   nh.deleteParam("ke");
+
+
+  std::vector<std::string> analysis_engine_name_list;
+
 
   // if only argument is an AE (nh.param reudces argc)
   if (argc == 2)
@@ -120,6 +135,34 @@ int main(int argc, char* argv[])
     analysis_engine_names = argv[1];
   }
   rs::common::getAEPaths(analysis_engine_names, analysis_engine_file);
+
+  std::stringstream ss(analysis_engine_names);
+  while (ss.good())
+  {
+    std::string substring;
+    std::getline(ss, substring, ',');
+    if (substring != "")
+    {
+      analysis_engine_name_list.push_back(substring);
+    }
+  }
+
+  std::vector<std::string> analysis_engine_file_paths;
+  for (auto ae_name : analysis_engine_name_list)
+  {
+    rs::common::getAEPaths(ae_name, analysis_engine_file);
+
+    if (analysis_engine_file.empty())
+    {
+      outError("analysis engine \"" << ae_name << "\" not found.");
+      return -1;
+    }
+    else
+    {
+      analysis_engine_file_paths.push_back(analysis_engine_file);
+    }
+  }
+
 
   if (analysis_engine_file.empty())
   {
@@ -146,17 +189,80 @@ int main(int argc, char* argv[])
     return 0;
   }
 
+  ros::Publisher result_pub;
+  if (publishResults)
+  {
+    result_pub = nh.advertise<robosherlock_msgs::RSObjectDescriptions>(std::string("result_advertiser"), 1);
+  }
+
+  std::vector<RSAggregateAnalysisEngine*> rsaaes;
   try
   {
-    // create the perception system
-    RSProcessManager manager(analysis_engine_file, useVisualizer, keType);
-    manager.setUseIdentityResolution(useObjIDRes);
-    manager.setWaitForService(waitForServiceCall);
-    manager.setParallel(parallel);
-    manager.setPervasive(pervasive);
+    //checking if we need to continue using the RSProcessManager (Query Handling)
+    if (waitForServiceCall == true)
+    {
+      outInfo("Using the RSProcessManager");
+      // create the perception system
+      RSProcessManager manager(analysis_engine_file_paths.front(), analysis_engine_file_paths.back(), useVisualizer,
+                               keType);
 
-    // start the perception system
-    manager.run();
+      manager.setUseIdentityResolution(useObjIDRes);
+      manager.setWaitForService(waitForServiceCall);
+      manager.setParallel(parallel);
+      manager.setPervasive(pervasive);
+      manager.run();
+    }
+    else
+    {
+      //similar to AAE without the service and query handling from the RSProcessManager
+      outInfo("Processing without the RSProcessManager");
+      // singl
+      uima::ResourceManager& resourceManager = uima::ResourceManager::createInstance("RoboSherlock");
+
+      mongo::client::GlobalInstance instance;  // this is a stupid thing we did now we suffer the consequences
+      ros::AsyncSpinner spinner(0);
+
+      rs::Visualizer vis(!useVisualizer, true);
+      spinner.start();
+      for (auto ae_path : analysis_engine_file_paths)
+      {
+        RSAggregateAnalysisEngine* engine = rs::createRSAggregateAnalysisEngine(ae_path);
+        rsaaes.push_back(engine);
+        vis.addVisualizableGroupManager(engine->getAAEName());
+      }
+      vis.start();
+
+      ros::Rate rate(30.0);
+      while (ros::ok())
+      {
+        signal(SIGINT, signalHandler);
+
+        // Analysis Engine processing
+        for (auto rsaae : rsaaes)
+        {
+          rsaae->resetCas();
+          rsaae->processOnce();
+          // Add the finished CAS ptr to the CASConsumerContext
+          rs::CASConsumerContext::getInstance().addCAS(rsaae->getAAEName(), rsaae->getCas());
+
+          if (publishResults)
+          {
+            std::vector<std::string> obj_descriptions;
+            rs::ObjectDesignatorFactory dw(rsaae->getCas(), rs::ObjectDesignatorFactory::Mode::CLUSTER);
+            dw.getObjectDesignators(obj_descriptions);
+            robosherlock_msgs::RSObjectDescriptions objDescr;
+            objDescr.obj_descriptions = obj_descriptions;
+            result_pub.publish(objDescr);
+          }
+        } // end of AE processing
+
+        // Clear up CASes after consumption modules are done
+        rs::CASConsumerContext::getInstance().clearCASes();
+
+        rate.sleep();
+      }
+    }
+
   }
   catch (const rs::Exception& e)
   {

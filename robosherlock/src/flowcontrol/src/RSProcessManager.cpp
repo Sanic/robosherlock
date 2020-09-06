@@ -3,14 +3,14 @@
 // needed for action server
 #include <robosherlock/queryanswering/RSQueryActionServer.h>
 
-RSProcessManager::RSProcessManager(std::string engineFile, const bool useVisualizer,
+RSProcessManager::RSProcessManager(std::string engineFile, std::string engineFileS, const bool useVisualizer,
                                    rs::KnowledgeEngine::KnowledgeEngineType keType)
-  : nh_("~")
-  , spinner_(0)
-  , it_(nh_)
-  , useVisualizer_(useVisualizer)
-  , use_identity_resolution_(false)
-  , visualizer_(!useVisualizer, true)
+    : nh_("~")
+    , spinner_(0)
+    , it_(nh_)
+    , useVisualizer_(useVisualizer)
+    , use_identity_resolution_(false)
+    , visualizer_(!useVisualizer, true)
 {
   outInfo("Creating resource manager");
   signal(SIGINT, RSProcessManager::signalHandler);
@@ -36,8 +36,18 @@ RSProcessManager::RSProcessManager(std::string engineFile, const bool useVisuali
 
   query_interface_ = std::make_shared<QueryInterface>(knowledge_engine_);
 
-  engine_ = rs::createRSAggregateAnalysisEngine(engineFile);
+  bool secAeEmpty = engineFileS.empty();
 
+  spinner_.start();
+  engine_ = rs::createRSAggregateAnalysisEngine(engineFile);
+  visualizer_.addVisualizableGroupManager(engine_->getAAEName());
+
+  //just a small test if the second AAE is set or not using the secAeEmpty for ensuring
+  if (!secAeEmpty)
+  {
+    engineS_ = rs::createRSAggregateAnalysisEngine(engineFileS);
+    visualizer_.addVisualizableGroupManager(engineS_->getAAEName());
+  }
   knowledge_engine_->retractAllAnnotators();
   knowledge_engine_->assertAnnotators(engine_->getDelegateAnnotatorCapabilities());
 
@@ -54,11 +64,7 @@ RSProcessManager::RSProcessManager(std::string engineFile, const bool useVisuali
   // ROS action server for query answering
   actionServer = new RSQueryActionServer(nh_, this);
 
-
-  spinner_.start();
-  visualizer_.addVisualizableGroupManager(engine_->getAAEName()); 
   visualizer_.start();
-
 }
 
 RSProcessManager::~RSProcessManager()
@@ -67,6 +73,12 @@ RSProcessManager::~RSProcessManager()
   engine_->resetCas();
   engine_->collectionProcessComplete();
   engine_->destroy();
+  if (!secAeEmpty)
+  {
+    engineS_->resetCas();
+    engineS_->collectionProcessComplete();
+    engineS_->destroy();
+  }
   uima::ResourceManager::deleteInstance();
   outInfo("RSControledAnalysisEngine Stoped");
 }
@@ -98,8 +110,27 @@ void RSProcessManager::run()
   }
 }
 
+//the runOnce is bascily the function that execute the second pipeline we do not apply any query handlign on that
+void RSProcessManager::runOnce()
+{
+  if (!secAeEmpty)
+  {
+    outInfo("The Second AE was called, after handling the query");
+    std::vector<std::string> objDescriptions;
+    engineS_->resetCas();
+    engineS_->processOnce();
+    rs::ObjectDesignatorFactory dw(engineS_->getCas());
+    use_identity_resolution_ ? dw.setMode(rs::ObjectDesignatorFactory::Mode::OBJECT) :
+    dw.setMode(rs::ObjectDesignatorFactory::Mode::CLUSTER);
+    dw.getObjectDesignators(objDescriptions);
+    robosherlock_msgs::RSObjectDescriptions objDescr;
+    objDescr.obj_descriptions = objDescriptions;
+    result_pub_.publish(objDescr);
+  }
+}
+
 bool RSProcessManager::visControlCallback(robosherlock_msgs::RSVisControl::Request &req,
-    robosherlock_msgs::RSVisControl::Response &res)
+                                          robosherlock_msgs::RSVisControl::Response &res)
 {
   std::string command = req.command;
   bool result = true;
@@ -267,6 +298,8 @@ bool RSProcessManager::handleQuery(std::string &request, std::vector<std::string
       objDescriptions.obj_descriptions = result;
       result_pub_.publish(objDescriptions);
 
+      //calling the second pipeline, after the query handling is done with the first pipeline
+      runOnce();
       return true;
     }
 
