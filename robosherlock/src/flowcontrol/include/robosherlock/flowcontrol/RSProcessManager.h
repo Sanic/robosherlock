@@ -45,6 +45,7 @@ class RSProcessManager
 public:
 
   RSAggregateAnalysisEngine *engine_;
+  RSAggregateAnalysisEngine *engineS_;
   std::shared_ptr<rs::KnowledgeEngine> knowledge_engine_;
   std::shared_ptr<QueryInterface> query_interface_;
 
@@ -73,6 +74,7 @@ public:
   bool useVisualizer_;
   bool use_identity_resolution_;
   bool parallel_, pervasive_;
+  bool secAeEmpty;
 
   std::mutex processing_mutex_;
 
@@ -86,7 +88,7 @@ public:
    * results on a topic
    * @param keType set the knowledge Engine you would like to use. options are knowrob (JSON_PROLOG) or SWI_PROLOG
    */
-  RSProcessManager(std::string aae_name, const bool useVisualizer, rs::KnowledgeEngine::KnowledgeEngineType keType);
+  RSProcessManager(std::string aae_name, std::string aae_nameS, const bool useVisualizer, rs::KnowledgeEngine::KnowledgeEngineType keType);
 
   /**
     * @brief destructor
@@ -98,6 +100,7 @@ public:
    * in a continuous loop;
    */
   void run();
+  void runOnce();
 
   /**
    * @brief RSProcessManager::resetAECallback callback funciton for resetting the engine;
