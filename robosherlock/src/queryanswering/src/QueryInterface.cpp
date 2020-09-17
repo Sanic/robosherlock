@@ -149,7 +149,7 @@ bool QueryInterface::handleDetect(std::vector<std::string>& res)
       new_pipeline_order.end())
   {
     std::vector<std::string>::iterator it =
-        std::find(new_pipeline_order.begin(), new_pipeline_order.end(), pose_estimation_annotator_insert_after_;
+        std::find(new_pipeline_order.begin(), new_pipeline_order.end(), pose_estimation_annotator_insert_after_);
     if (it != new_pipeline_order.end())
       new_pipeline_order.insert(it + 1, pose_estimation_annotator_name_);
   }

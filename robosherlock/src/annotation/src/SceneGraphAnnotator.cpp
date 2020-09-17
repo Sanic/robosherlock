@@ -41,13 +41,13 @@
 #include <pcl/search/impl/kdtree.hpp>
 
 //project
-#include <rs/scene_cas.h>
-#include <rs/DrawingAnnotator.h>
-#include <rs/utils/time.h>
-#include <rs/utils/output.h>
-#include <rs/utils/common.h>
-#include <rs/annotation/SceneGraphAnnotator.h>
-#include <rs/annotation/ObjectNameMapItem.h>
+#include <robosherlock/scene_cas.h>
+#include <robosherlock/DrawingAnnotator.h>
+#include <robosherlock/utils/time.h>
+#include <robosherlock/utils/output.h>
+#include <robosherlock/utils/common.h>
+#include <robosherlock/annotation/SceneGraphAnnotator.h>
+#include <robosherlock/annotation/ObjectNameMapItem.h>
 
 #include <sensor_msgs/image_encodings.h>
 #include <cv_bridge/cv_bridge.h>
