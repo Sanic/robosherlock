@@ -134,7 +134,6 @@ int main(int argc, char* argv[])
     }
     analysis_engine_names = argv[1];
   }
-  rs::common::getAEPaths(analysis_engine_names, analysis_engine_file);
 
   std::stringstream ss(analysis_engine_names);
   while (ss.good())
