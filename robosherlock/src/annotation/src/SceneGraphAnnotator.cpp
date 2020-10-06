@@ -101,7 +101,7 @@ private:
 
 public:
 
-  SceneGraphAnnotator(): DrawingAnnotator(__func__)
+  SceneGraphAnnotator(): DrawingAnnotator(__func__),pointSize(1)
   {
     cloud_ptr = pcl::PointCloud<PointT>::Ptr(new pcl::PointCloud<PointT>);
     //client = n.serviceClient<rs_robotvqa_msgs::GetSceneGraph>("/get_scene_graph");

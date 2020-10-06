@@ -48,10 +48,10 @@ public:
   //When answering queries, we'll always execute a method for pose estimation.
   //You can define here the name of the Annotator that should estimate the pose
   //and the name of the annotator after which the Pose Annotator should be ran
-  std::string pose_estimation_annotator_name_ = "Cluster3DGeometryAnnotator";
-  std::string pose_estimation_annotator_insert_after_ = "ClusterMerger";
-  // std::string pose_estimation_annotator_name_ = "Object6DPoseAnnotator";
-  // std::string pose_estimation_annotator_insert_after_ = "SceneGraphAnnotator";
+  // std::string pose_estimation_annotator_name_ = "Cluster3DGeometryAnnotator";
+  // std::string pose_estimation_annotator_insert_after_ = "ClusterMerger";
+  std::string pose_estimation_annotator_name_ = "Object6DPoseAnnotator";
+  std::string pose_estimation_annotator_insert_after_ = "SceneGraphAnnotator";
 
   QueryInterface(std::shared_ptr<rs::KnowledgeEngine> ke)
   {
